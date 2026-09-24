@@ -560,11 +560,11 @@ def build_stacked_psf(
     target_ids = [int(x) for x in selected['label']]
 
     # Step 2: Read background-subtracted image
-    sci_sub = fits.getdata(sci_image) if isinstance(sci_image, str) else sci_image
+    sci = fits.getdata(sci_image) if isinstance(sci_image, str) else sci_image
 
     # Step 3: Cutout stars
     valid_ids, sci_cutout_list, mask_list, valid_coords = cutout_stars(
-        sci_image=sci_sub,
+        sci_image=sci,
         seg_file=seg_file,
         catalog_file=catalog_file,
         star_ids=target_ids,
