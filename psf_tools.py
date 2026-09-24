@@ -70,7 +70,7 @@ def select_valid_stars(
         print(f"Input exclude ids are not None, exclude the ids for building stacked PSF.")
     outtab1 = outtab[fltr]
     print(f"{len(outtab1)} sources satisfy stellar criteria "
-          f"(elong<{elongation_limit}, class_star>{class_star_limit}, combined_flags<{combined_flags_limit}"
+          f"(elong<{elongation_limit}, class_star>{class_star_limit}, combined_flags<{combined_flags_limit}, "
           f"mag {mag_bright_limit}-{mag_faint_limit}, SNR>{SNR_limit})")
 
     seg = fits.getdata(seg_file)
@@ -136,7 +136,7 @@ def subtract_background(
     Returns (sci_sub, bkg_model, bkg_rms, mask).
     """
     sci = fits.getdata(sci_image)
-    mask = fits.getdata(external_mask)
+    mask = fits.getdata(external_mask, ext=1)  # HDU[1] = SOURCE_MASK
 
     print(f"Modeling and subtracting background "
           f"(box_size={bkg_box_size}, filter_size={bkg_filter_size})...")
@@ -388,14 +388,14 @@ def plot_psf_results(
         ax.set_xlabel('SNR'); ax.set_ylabel('Elongation')
         ax.set_xscale('log'); ax.set_ylim(0.8, 2.8); ax.legend()
         ax = axes[1]
-        ax.scatter(outtab['mag_auto'], outtab['kron_radius'] * pixel_scale,
+        ax.scatter(outtab['mag_auto'], outtab['flux_radius'] * pixel_scale,
                    c=outtab['class_star'], cmap='viridis', s=5, alpha=0.5, vmin=0, vmax=1)
-        ax.scatter(valid_stars['mag_auto'], valid_stars['kron_radius'] * pixel_scale,
+        ax.scatter(valid_stars['mag_auto'], valid_stars['flux_radius'] * pixel_scale,
                    s=5, marker='o', facecolors='none', edgecolors='red', alpha=0.7)
         ax.axvline(x=mag_bright_limit, ls='--', color='red', lw=1.5, alpha=0.8)
         ax.axvline(x=mag_faint_limit, ls='--', color='red', lw=1.5, alpha=0.8)
-        ax.set_xlabel('Magnitude'); ax.set_ylabel('Kron Radius (arcsec)')
-        ax.invert_xaxis(); ax.set_ylim(0.8, 1.8)
+        ax.set_xlabel('Magnitude'); ax.set_ylabel('Flux Radius (arcsec)')
+        ax.invert_xaxis(); ax.set_yscale('log')
         plt.tight_layout()
         fig.subplots_adjust(right=0.92)
         cbar_ax = fig.add_axes([0.94, 0.15, 0.015, 0.7])
@@ -458,8 +458,8 @@ def plot_psf_results(
     # --- PSF image ---
     if plot_psf_image:
         fig, ax = plt.subplots(figsize=(6, 6))
-        norm = simple_norm(psf, 'asinh', vmin=np.percentile(psf, 5), vmax=np.percentile(psf, 99.5))
-        ax.imshow(psf, origin='lower', cmap='Greys_r', norm=norm)
+        norm = simple_norm(psf, 'asinh', vmin=np.percentile(psf, 5), vmax=np.percentile(psf, 98.5))
+        ax.imshow(psf, origin='lower', cmap='viridis', norm=norm)
         ax.set_title(f'Stacked PSF\\nFWHM={fwhm_stacked * pixel_scale:.2f} arcsec',
                      fontsize=12, fontweight='bold')
         ax.axis('off')
@@ -511,15 +511,11 @@ def build_stacked_psf(
     exclude_ids=None,       # IDs to exclude from selection
     skip_bright_neighbors: bool = True,
     mag_gap_limit: float = 3.0,
+    verbose: bool = True,
     # Cutout
     cutout_size: int = 71,
     save_cutouts: bool = True,
     cutouts_dir: str = "cutouts",
-    # Background
-    subtract_bkg: bool = False,
-    external_mask: Optional[str] = None,  # required if subtract_bkg=True
-    bkg_box_size: int = 64,
-    bkg_filter_size: Tuple[int, int] = (3, 3),
     # Stacking
     oversampling: int = 3,
     n_recenter: int = 10,
@@ -538,10 +534,9 @@ def build_stacked_psf(
 
     Steps:
       1. select_valid_stars()       — filter catalog (skipped if star_ids provided)
-      2. subtract_background()      — remove sky background (if subtract_bkg=True)
-      3. cutout_stars()             — extract stamp cutouts
-      4. stack_psf (psfr)           — build oversampled PSF
-      5. plot_psf_results()         — visualize
+      2. cutout_stars()             — extract stamp cutouts
+      3. stack_psf (psfr)           — build oversampled PSF
+      4. plot_psf_results()         — visualize
     """
     os.makedirs(output_dir, exist_ok=True)
 
@@ -560,19 +555,12 @@ def build_stacked_psf(
             mag_gap_limit=mag_gap_limit,
             select_ids=select_ids,
             exclude_ids=exclude_ids,
+            verbose=verbose,
         )
     target_ids = [int(x) for x in selected['label']]
 
-    # Step 2: Background subtraction (optional, requires external_mask)
-    if subtract_bkg:
-        if external_mask is None:
-            raise ValueError("external_mask is required when subtract_bkg=True")
-        sci_sub, bkg_model, bkg_rms, source_mask = subtract_background(
-            sci_image, external_mask, output_dir,
-            bkg_box_size=bkg_box_size, bkg_filter_size=bkg_filter_size,
-        )
-    else:
-        sci_sub = fits.getdata(sci_image) if isinstance(sci_image, str) else sci_image  # use original image as-is
+    # Step 2: Read background-subtracted image
+    sci_sub = fits.getdata(sci_image) if isinstance(sci_image, str) else sci_image
 
     # Step 3: Cutout stars
     valid_ids, sci_cutout_list, mask_list, valid_coords = cutout_stars(
@@ -586,7 +574,7 @@ def build_stacked_psf(
         cutouts_dir=cutouts_dir,
     )
 
-    # Step 4: Stack PSF
+    # Step 4 (old): Stack PSF
     result = stack_psf(
         sci_cutout_list,
         oversampling=oversampling,
