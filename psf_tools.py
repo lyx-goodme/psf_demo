@@ -407,7 +407,7 @@ def plot_psf_results(
         ax.set_xlabel('Radius (arcsec)')
         ax.set_ylabel('Normalized Flux')
         ax.set_yscale('log')
-        ax.set_ylim(2e-5, 1.2)
+        ax.set_ylim(1e-5, 1.2)
         ax.legend()
         ax.set_title('Selected Stars Radial Profiles')
         fig.savefig(os.path.join(output_dir, 'stars_radial_profiles.png'),
