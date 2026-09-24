@@ -1,32 +1,35 @@
 """
 PSF stacking tools for DESI Legacy Survey data.
 
-Pipeline (step by step):
-  1. select_valid_stars()        — filter catalog by morphology criteria (no Gaia needed)
-  2. subtract_background()       — model and remove sky background
-  3. cutout_stars()              — extract stamp cutouts with masks
-  4. plot_psf_results()          — visualize overview, stamps, scatter, radial profiles
-  5. build_stacked_psf()         — master wrapper calling 1-4 + psfr stacking
+Core pipeline (build_stacked_psf):
+  1. select_valid_stars()        — filter catalog by morphology criteria
+  2. cutout_stars()              — extract stamp cutouts with masks
+  3. stack_psf (psfr)            — build oversampled PSF
+  4. plot_psf_results()          — visualize stamps, scatter, radial profiles, PSF image
+
+Pre-processing (call before build_stacked_psf):
+  subtract_background()   — model and remove sky background
 
 Additional helpers:
-  gaia_crossmatch()     — crossmatch SEx catalog with Gaia DR3
-  apply_gaia_criteria() — add parallax filter on top of morphology criteria
-  plot_background()     — show original / background / subtracted side-by-side
+  gaia_crossmatch()   — crossmatch SEx catalog with Gaia DR3
+  plot_background()   — show original / background / subtracted side-by-side
+  plot_segment()      — show segmentation map
+  plots_to_pdf()      — combine PNG files in output_dir into a single PDF
+  optimal_grid()      — compute optimal (rows, cols) for a given number of panels
 """
 import os, time
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 from astropy.io import fits, ascii
-from astropy.stats import sigma_clipped_stats, SigmaClip
+from astropy.stats import SigmaClip
 from astropy.visualization import simple_norm
-from scipy.ndimage import binary_dilation, gaussian_filter
+from scipy.ndimage import binary_dilation
 from photutils.background import Background2D, MedianBackground
 from photutils.profiles import RadialProfile
 from photutils.psf import fit_fwhm
 from psfr.psfr import stack_psf
 from psfr.util import oversampled2regular
-from typing import Optional, Tuple, List
+from typing import Tuple, List
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -441,13 +444,14 @@ def plot_psf_results(
 
         fig, ax = plt.subplots(figsize=(6, 6))
         ax.plot(rp_psf.radius * pixel_scale, psf_profile, color='red', lw=2.5, linestyle='--',
-                alpha=0.5, label=f'PSF Profile (FWHM/2={fwhm_stacked / 2:.2f} pix)')
+                alpha=0.5, label=f'PSF Profile (FWHM/2={fwhm_stacked * pixel_scale / 2:.2f} arcsec)')
         ax.plot(radii * pixel_scale, median, color='black', lw=1.2, label='Median Star Profile')
         ax.fill_between(radii * pixel_scale, p16, p84, color='gray', alpha=0.5, label='16-84th Percentile')
         ax.axvline(fwhm_stacked * pixel_scale / 2, ls='--', color='black', lw=1.5, alpha=0.7)
         ax.set_xlabel('Radius (arcsec)')
         ax.set_ylabel('Normalized Flux')
         ax.set_yscale('log')
+        ax.set_ylim(2e-5, 1.2)
         ax.legend()
         ax.set_title('Selected Stars Radial Profiles')
         fig.savefig(os.path.join(output_dir, 'stars_radial_profiles.png'),
@@ -638,35 +642,6 @@ def gaia_crossmatch(catalog_file: str, max_distance: float = 0.5):
     print(f"Gaia crossmatch: {len(df)}/{len(cat)} sources matched")
     return df
 
-
-def apply_gaia_criteria(
-    gaia_df: pd.DataFrame,
-    elongation_limit: float = 1.2,
-    class_star_limit: float = 0.9,
-    mag_bright_limit: float = 17.0,
-    mag_faint_limit: float = 22.0,
-    SNR_limit: float = 100.0,
-    plx_snr_limit: float = 3.0,
-):
-    """
-    Filter Gaia-crossmatched catalog by morphology + parallax criteria.
-    Returns filtered DataFrame.
-    """
-    mask = (
-        (gaia_df['elongation'] < elongation_limit) &
-        (gaia_df['class_star'] > class_star_limit) &
-        (gaia_df['combined_flags'] == 0) &
-        (gaia_df['mag_auto'] > mag_bright_limit) &
-        (gaia_df['mag_auto'] < mag_faint_limit) &
-        (gaia_df['segment_flux'] / gaia_df['segment_fluxerr'] > SNR_limit) &
-        (gaia_df['Plx'] / gaia_df['e_Plx'] > plx_snr_limit)
-    )
-    result = gaia_df[mask].reset_index(drop=True)
-    print(f"{len(result)} stars after all criteria "
-          f"(incl. Plx/e_Plx > {plx_snr_limit})")
-    return result
-
-
 def plot_background(
     sci_orig: np.ndarray,
     bkg_model: np.ndarray,
@@ -717,13 +692,15 @@ def plot_segment(
     output_dir: str,
 ):
     segm_data = fits.getdata(seg_file)
+    fig, ax = plt.subplots(figsize=(6, 6))
     n_labels = len(np.unique(segm_data)) - 1
     colors = np.random.rand(n_labels + 1, 3)
     colors[0] = [0, 0, 0]  # background black
     cmap = plt.matplotlib.colors.ListedColormap(colors)
-    plt.figure(figsize=(6, 6))
-    plt.imshow(segm_data, origin='lower', cmap=cmap, interpolation='nearest')
-    plt.title(f'Segementation Map')
+    ax.imshow(segm_data, origin='lower', cmap=cmap, interpolation='nearest')
+    ax.set_title(f'Segementation Map')
+    ax.axis('off')
     out = os.path.join(output_dir, 'segment_plot.png')
-    plt.savefig(out, dpi=300, bbox_inches='tight')
+    fig.savefig(out, dpi=300, bbox_inches='tight')
+    plt.close(fig)
     print(f"Segment plot saved to {out}")
