@@ -124,51 +124,7 @@ def select_valid_stars(
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 2. subtract_background — model and remove sky background
-# ═══════════════════════════════════════════════════════════════════
-
-def subtract_background(
-    sci_image: str,
-    external_mask: str,
-    output_dir: str,
-    bkg_box_size: int = 64,
-    bkg_filter_size: Tuple[int, int] = (3, 3),
-):
-    """
-    Model and subtract sky background from science image and external mask.
-    Returns (sci_sub, bkg_model, bkg_rms, mask).
-    """
-    sci = fits.getdata(sci_image)
-    mask = fits.getdata(external_mask, ext=1)  # HDU[1] = SOURCE_MASK
-
-    print(f"Modeling and subtracting background "
-          f"(box_size={bkg_box_size}, filter_size={bkg_filter_size})...")
-    t0 = time.time()
-
-    bkg = Background2D(sci, (bkg_box_size, bkg_box_size),
-                       filter_size=bkg_filter_size,
-                       mask=mask,
-                       bkg_estimator=MedianBackground(),
-                       sigma_clip=SigmaClip(sigma=3.0))
-    sci_sub = sci - bkg.background
-
-    # Save background model
-    hdu_prim = fits.PrimaryHDU()
-    hdu_bkg_mask = fits.ImageHDU(mask.astype(np.uint8), name='SOURCE_MASK')
-    hdu_bkg = fits.ImageHDU(bkg.background, name='BACKGROUND')
-    hdu_rms = fits.ImageHDU(bkg.background_rms, name='BACKGROUND_RMS')
-    hdul = fits.HDUList([hdu_prim, hdu_bkg_mask, hdu_bkg, hdu_rms])
-    hdul.writeto(os.path.join(output_dir, 'background_model.fits'), overwrite=True)
-
-    print(f"Background subtraction done in {time.time() - t0:.1f}s")
-    print(f"Background median: {np.median(bkg.background):.4f}, "
-          f"RMS: {np.median(bkg.background_rms):.4f}")
-
-    return sci_sub, bkg.background, bkg.background_rms, mask
-
-
-# ═══════════════════════════════════════════════════════════════════
-# 3. cutout_stars — extract stamps around selected stars
+# 2. cutout_stars — extract stamps around selected stars
 # ═══════════════════════════════════════════════════════════════════
 
 def cutout_stars(
@@ -308,7 +264,7 @@ def cutout_stars(
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 4. plot_psf_results — visualize everything
+# 3. plot_psf_results — visualize everything
 # ═══════════════════════════════════════════════════════════════════
 
 def optimal_grid(n_items, max_rows=None):
@@ -496,7 +452,7 @@ def plots_to_pdf(output_dir: str, pdf_name: str = "results.pdf"):
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 5. build_stacked_psf — master pipeline
+# 4. build_stacked_psf — master pipeline
 # ═══════════════════════════════════════════════════════════════════
 
 def build_stacked_psf(
@@ -578,7 +534,7 @@ def build_stacked_psf(
         cutouts_dir=cutouts_dir,
     )
 
-    # Step 4 (old): Stack PSF
+    # Step 4: Stack PSF
     result = stack_psf(
         sci_cutout_list,
         oversampling=oversampling,
@@ -619,8 +575,48 @@ def build_stacked_psf(
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Additional helpers for Gaia crossmatch
+# Additional helpers
 # ═══════════════════════════════════════════════════════════════════
+
+def subtract_background(
+    sci_image: str,
+    external_mask: str,
+    output_dir: str,
+    bkg_box_size: int = 64,
+    bkg_filter_size: Tuple[int, int] = (3, 3),
+):
+    """
+    Model and subtract sky background from science image and external mask.
+    Returns (sci_sub, bkg_model, bkg_rms, mask).
+    """
+    sci = fits.getdata(sci_image)
+    mask = fits.getdata(external_mask, ext=1)  # HDU[1] = SOURCE_MASK
+
+    print(f"Modeling and subtracting background "
+          f"(box_size={bkg_box_size}, filter_size={bkg_filter_size})...")
+    t0 = time.time()
+
+    bkg = Background2D(sci, (bkg_box_size, bkg_box_size),
+                       filter_size=bkg_filter_size,
+                       mask=mask,
+                       bkg_estimator=MedianBackground(),
+                       sigma_clip=SigmaClip(sigma=3.0))
+    sci_sub = sci - bkg.background
+
+    # Save background model
+    hdu_prim = fits.PrimaryHDU()
+    hdu_bkg_mask = fits.ImageHDU(mask.astype(np.uint8), name='SOURCE_MASK')
+    hdu_bkg = fits.ImageHDU(bkg.background, name='BACKGROUND')
+    hdu_rms = fits.ImageHDU(bkg.background_rms, name='BACKGROUND_RMS')
+    hdul = fits.HDUList([hdu_prim, hdu_bkg_mask, hdu_bkg, hdu_rms])
+    hdul.writeto(os.path.join(output_dir, 'background_model.fits'), overwrite=True)
+
+    print(f"Background subtraction done in {time.time() - t0:.1f}s")
+    print(f"Background median: {np.median(bkg.background):.4f}, "
+          f"RMS: {np.median(bkg.background_rms):.4f}")
+
+    return sci_sub, bkg.background, bkg.background_rms, mask
+
 
 def gaia_crossmatch(catalog_file: str, max_distance: float = 0.5):
     """
