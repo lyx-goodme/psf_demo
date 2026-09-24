@@ -38,6 +38,7 @@ def select_valid_stars(
     seg_file: str,
     elongation_limit: float = 1.2,
     class_star_limit: float = 0.9,
+    combined_flags_limit: int = 1,
     mag_bright_limit: float = 17.0,
     mag_faint_limit: float = 22.0,
     SNR_limit: float = 100.0,
@@ -45,7 +46,8 @@ def select_valid_stars(
     skip_bright_neighbors: bool = True,
     mag_gap_limit: float = 3.0,
     select_ids: List[int] = None,
-    exclude_ids: List[int] = None
+    exclude_ids: List[int] = None,
+    verbose: bool = True
 ):
     """
     Filter SExtractor catalog by stellar morphology criteria.
@@ -55,7 +57,7 @@ def select_valid_stars(
     fltr = (
         (outtab['elongation'] < elongation_limit) &
         (outtab['class_star'] > class_star_limit) &
-        (outtab['combined_flags'] == 0) &
+        (outtab['combined_flags'] < combined_flags_limit) &
         (outtab['mag_auto'] > mag_bright_limit) &
         (outtab['mag_auto'] < mag_faint_limit) &
         (outtab['segment_flux'] / outtab['segment_fluxerr'] > SNR_limit)
@@ -68,7 +70,7 @@ def select_valid_stars(
         print(f"Input exclude ids are not None, exclude the ids for building stacked PSF.")
     outtab1 = outtab[fltr]
     print(f"{len(outtab1)} sources satisfy stellar criteria "
-          f"(elong<{elongation_limit}, class_star>{class_star_limit}, "
+          f"(elong<{elongation_limit}, class_star>{class_star_limit}, combined_flags<{combined_flags_limit}"
           f"mag {mag_bright_limit}-{mag_faint_limit}, SNR>{SNR_limit})")
 
     seg = fits.getdata(seg_file)
@@ -99,17 +101,19 @@ def select_valid_stars(
                 for nid in other_ids:
                     other_mag = float(outtab[outtab['label'] == nid]['mag_auto'][0])
                     if other_mag < target_mag + mag_gap_limit:
-                        print(f"Source {nid} in the star ID {target_id} cutout is bright or not faint enough "
-                              f"(mag={other_mag:.2f}) compared to target star "
-                              f"(mag={target_mag:.2f}), skipped.")
+                        if verbose:
+                            print(f"Source {nid} in the star ID {target_id} cutout is bright or not faint enough "
+                                  f"(mag={other_mag:.2f}) compared to target star "
+                                  f"(mag={target_mag:.2f}), skipped.")
                         skip = True
                         break
                 if skip:
                     continue
             valid_ids.append(target_id)
         else:
-            print(f"Star ID {target_id} at ({xc:.1f}, {yc:.1f}) "
-                  f"too close to edge, skipped.")
+            if verbose:
+                print(f"Star ID {target_id} at ({xc:.1f}, {yc:.1f}) "
+                      f"too close to edge, skipped.")
     if len(valid_ids) == 0:
         raise ValueError(f"No valid stars for stack PSF!")
     result = outtab1[np.isin(outtab1['label'], valid_ids)]
@@ -499,6 +503,7 @@ def build_stacked_psf(
     # Selection criteria
     elongation_limit: float = 1.5,
     class_star_limit: float = 0.9,
+    combined_flags_limit: int = 1,
     mag_bright_limit: float = 19.0,
     mag_faint_limit: float = 21.0,
     SNR_limit: float = 100.0,
@@ -546,6 +551,7 @@ def build_stacked_psf(
             seg_file=seg_file,
             elongation_limit=elongation_limit,
             class_star_limit=class_star_limit,
+            combined_flags_limit=combined_flags_limit,
             mag_bright_limit=mag_bright_limit,
             mag_faint_limit=mag_faint_limit,
             SNR_limit=SNR_limit,
@@ -717,3 +723,19 @@ def plot_background(
     fig.savefig(out, dpi=150, bbox_inches='tight', facecolor='white')
     plt.close(fig)
     print(f"Background comparison saved to {out}")
+
+def plot_segment(
+    seg_file: str,
+    output_dir: str,
+):
+    segm_data = fits.getdata(seg_file)
+    n_labels = len(np.unique(segm_data)) - 1
+    colors = np.random.rand(n_labels + 1, 3)
+    colors[0] = [0, 0, 0]  # background black
+    cmap = plt.matplotlib.colors.ListedColormap(colors)
+    plt.figure(figsize=(6, 6))
+    plt.imshow(segm_data, origin='lower', cmap=cmap, interpolation='nearest')
+    plt.title(f'Segementation Map')
+    out = os.path.join(output_dir, 'segment_plot.png')
+    plt.savefig(out, dpi=300, bbox_inches='tight')
+    print(f"Segment plot saved to {out}")
