@@ -563,7 +563,7 @@ def _gaia_crossmatch_esa(cat, ra_col, dec_col, max_distance, fetch_classprob,
 
     for attempt in range(1, max_retries + 1):
         try:
-            job = Gaia.launch_job(query)
+            job = Gaia.launch_job_async(query)
             gaia = job.get_results()
             break
         except Exception as e:
@@ -623,7 +623,7 @@ def _fetch_classprob(df, max_retries=3, verbose=True):
         batch_id = b // 100
         for attempt in range(1, max_retries + 1):
             try:
-                job = Gaia.launch_job(
+                job = Gaia.launch_job_async(
                     f"SELECT source_id, classprob_dsc_combmod_star "
                     f"FROM gaiadr3.gaia_source "
                     f"WHERE source_id IN ({','.join(str(s) for s in batch)})")

@@ -49,7 +49,7 @@ def plot_overview(sci_image, valid_coords, valid_ids, outfile,
     ax.set_title(f'Selected Stars Overview (mag: {mag_bright_limit}-{mag_faint_limit})', fontsize=14)
     ax.legend(fontsize=11)
     plt.tight_layout()
-    fig.savefig(outfile, dpi=300, bbox_inches='tight')
+    fig.savefig(outfile, dpi=150, bbox_inches='tight')
     plt.close(fig)
     print(f"Overview image saved to {outfile}")
 
@@ -58,7 +58,7 @@ def plot_star_stamps(sci_cutout_list, valid_ids, mask_list, outfile):
     """Grid of individual star cutouts with mask overlay."""
     n = len(sci_cutout_list)
     rows, cols = optimal_grid(n)
-    fig, axes = plt.subplots(rows, cols, figsize=(cols * 2, rows * 2))
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 1.5, rows * 1.5))
     axes = np.atleast_1d(axes).flatten()
     for i, ax in enumerate(axes):
         if i < n:
@@ -73,10 +73,10 @@ def plot_star_stamps(sci_cutout_list, valid_ids, mask_list, outfile):
                 mask_overlay[~mask.astype(bool)] = [0.5, 0.5, 0.5, 0.7]
                 ax.imshow(mask_overlay, origin='lower')
             ax.text(0.02, 0.02, f'star{valid_ids[i]}', transform=ax.transAxes,
-                    color='white', fontweight='bold')
+                    color='white', fontweight='bold', fontsize=6)
         ax.axis('off')
     plt.tight_layout()
-    fig.savefig(outfile, dpi=600, bbox_inches='tight')
+    fig.savefig(outfile, dpi=100, bbox_inches='tight')
     plt.close(fig)
     print(f"Stars image saved to {outfile}")
 
@@ -124,7 +124,7 @@ def plot_scatter_diagnostics(catalog_file, valid_ids, outfile,
     fig.subplots_adjust(right=0.92)
     cbar_ax = fig.add_axes([0.94, 0.15, 0.015, 0.7])
     fig.colorbar(mp, cax=cbar_ax, label='class_star')
-    fig.savefig(outfile, dpi=200, bbox_inches='tight')
+    fig.savefig(outfile, dpi=120, bbox_inches='tight')
     plt.close(fig)
     print(f"Stars scatter saved to {outfile}")
 
@@ -156,7 +156,7 @@ def plot_psf_radial_profile(psf, outfile, ax=None, color='red', label=None, pixe
     ax.legend()
     ax.set_title('PSF Radial Profile')
     if own_fig:
-        fig.savefig(outfile, dpi=200, bbox_inches='tight')
+        fig.savefig(outfile, dpi=120, bbox_inches='tight')
         plt.close(fig)
         print(f"PSF radial profile plot saved to {outfile}")
 
@@ -208,7 +208,7 @@ def plot_radial_profiles(sci_cutout_list, mask_list, psf, outfile, pixel_scale=0
     ax.set_ylim(1e-5, 1.2)
     ax.legend()
     ax.set_title('Selected Stars Radial Profiles')
-    fig.savefig(outfile, dpi=200, bbox_inches='tight')
+    fig.savefig(outfile, dpi=120, bbox_inches='tight')
     plt.close(fig)
     print(f"Radial profile plot saved to {outfile}")
 
@@ -235,7 +235,7 @@ def plot_psf_image(psf, outfile=None, ax=None, title=None, cmap='viridis', pixel
     ax.axis('off')
 
     if own_fig:
-        fig.savefig(outfile, dpi=200, bbox_inches='tight')
+        fig.savefig(outfile, dpi=120, bbox_inches='tight')
         plt.close(fig)
         print(f"PSF image saved to {outfile}")
 
@@ -287,7 +287,7 @@ def plot_background(
     ax.axis('off')
     fig.colorbar(im, ax=ax, location='right', shrink=0.8)
 
-    fig.savefig(outfile, dpi=150, bbox_inches='tight', facecolor='white')
+    fig.savefig(outfile, dpi=100, bbox_inches='tight', facecolor='white')
     plt.close(fig)
     print(f"Background comparison saved to {outfile}")
 
@@ -304,7 +304,7 @@ def plot_segment(seg_file, outfile):
     ax.set_title('Segmentation Map')
     ax.axis('off')
     fig.tight_layout()
-    fig.savefig(outfile, dpi=200, bbox_inches='tight', facecolor='white')
+    fig.savefig(outfile, dpi=120, bbox_inches='tight', facecolor='white')
     plt.close(fig)
     print(f"Segment plot saved to {outfile}")
 
